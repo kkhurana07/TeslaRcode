@@ -1,0 +1,503 @@
+---
+title: "Stat 311 Final Project"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+date: "2022-12-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("r package", repos = "http://cran.us.r-project.org")
+
+```
+
+```{r}
+install.packages("tidyverse")
+install.packages("scales")
+library(tidyverse)
+```
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#install.packages("leaps")
+remove.packages("rlang")
+install.packages("scales") 
+install.packages("rlang")
+#install.packages("LibPath")
+install.packages("DAAG")
+install.packages("tidyverse")
+#install.packages("ggplot2")
+#install.packages("randomForest")
+#install.packages("ISLR2")
+#install.packages("caret")
+#install.packages("gbm")
+library(leaps)
+library(lubridate)
+library(MASS)
+library(ISLR2)
+library(DAAG)
+library(dplyr)
+library(tidyverse)
+library(randomForest)
+library(gbm)
+```
+
+
+
+```{r}
+#Reading the dataset and changing the volume to numeric.
+Tesla <- read.csv("C:/Users/Kunal/Desktop/STAT 311 Final Project/TSLA.csv")
+
+Tesla$Volume = as.numeric(Tesla$Volume)/1e6
+Tesla$Date <- as.Date(Tesla$Date)
+str(Tesla) 
+```
+
+
+
+```{r}
+png(file="./Tesla12.png");Tesla %>% ggplot( aes(x=Date, y=Adj.Close)) +
+    geom_line() +
+    geom_point(); dev.off()
+
+summary(Tesla)
+```
+
+
+
+```{r}
+
+png(file="./TeslaVol.png");Tesla %>% filter(Date>"2009-01-01") %>% group_by(month = lubridate::floor_date(Date, 'month')) %>% group_by(month) %>% summarise(mean_vol= mean(Volume)) %>% filter(month>"2020-01-01") %>% ggplot() +geom_bar( aes(x=month, y=mean_vol),stat="identity",colour="#006000") + labs( x= "Months", y="Monthly Average" ,title = "Monthly Average Traded Volume since Covid (in Millions)"); dev.off()
+
+
+```
+
+
+
+
+
+```{r}
+Tesla %>% filter(Date>"2022-06-01") %>% ggplot() +geom_line( aes(x=Date, y=High),stat="identity",colour="#006000") + labs( x= "Date", y="Daily High Stock Price" ,title = "Daily Highs for last 6 months") 
+```
+
+
+
+```{r}
+
+colnames(Tesla)
+Cols =  colnames(Tesla)[colnames(Tesla)!="Date"]
+Cols
+
+round(cor(Tesla[Cols]), digits=3)
+
+```
+
+
+
+```{r}
+fit = lm(High~Adj.Close, data = Tesla)
+png(file="./TeslaHigh.png");plot(High~Adj.Close, data=Tesla, col="dodgerblue", main ="Daily High versus Adjusted Closing Price since 2010",xlab="Adjusted Closign Price",ylab="HIghest Stock Price of that Day")
+abline(fit, col="green", lty=2, lwd=3); dev.off()
+```
+
+
+
+```{r}
+print("value of R^2, adjusted R^2, AIC and BIC for the fitted model:")
+c( summary(fit)$r.squared, 
+  summary(fit)$adj.r.squared,
+  AIC(fit),
+  BIC(fit) )
+
+```
+
+
+# Model Selection for Predicting
+
+
+```{r}
+# Model 1 using Shots
+mod1 = lm(log(High)~Adj.Close, data=Tesla)
+plot(mod1$res~mod1$fitted)
+#get summary and R-Squared
+summary(mod1)
+c(summary(mod1)$r.squared, summary(mod1)$adj.r.squared)
+```
+
+```{r}
+# Model 2 using Open price
+mod2 = lm(log(High)~Open, data=Tesla)
+plot(mod2$res~mod2$fitted)
+#get summary and R-Squared
+summary(mod2)
+c(summary(mod2)$r.squared, summary(mod2)$adj.r.squared)
+```
+
+
+
+
+```{r}
+# Model 2 using High price
+mod3 = lm(log(High)~Volume, data=Tesla)
+plot(mod3$res~mod3$fitted)
+#get summary and R-Squared
+summary(mod3)
+c(summary(mod3)$r.squared, summary(mod3)$adj.r.squared)
+```
+
+
+
+```{r}
+# Model 2 using Open price
+mod4 = lm(log(High)~Low, data=Tesla)
+plot(mod4$res~mod4$fitted)
+#get summary and R-Squared
+summary(mod4)
+c(summary(mod4)$r.squared, summary(mod4)$adj.r.squared)
+```
+
+
+
+
+
+```{r}
+# Model 2 using Open price
+mod5 = lm(log(High)~Adj.Close+Open+Volume+Low, data=Tesla)
+plot(mod5$res~mod5$fitted)
+abline(0,0,col = "red")
+#get summary and R-Squared
+summary(mod5)
+c(summary(mod5)$r.squared, summary(mod5)$adj.r.squared)
+```
+
+```{r}
+# model with all subset
+mod.allsubset = regsubsets(log(High)~Adj.Close+Open+Volume+Low, data=Tesla)
+summary(mod.allsubset)
+```
+
+```{r}
+summary(mod.allsubset)$rsq # R-squared
+summary(mod.allsubset)$adjr2 # adjusted R-squared
+summary(mod.allsubset)$cp # Cp
+summary(mod.allsubset)$bic #BIC
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(summary(mod.allsubset)$rsq, xlab = "Number of Variables",
+    ylab = "R^2", type = "l")
+plot(summary(mod.allsubset)$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted R^2", type = "l")
+plot(summary(mod.allsubset)$cp, xlab = "Number of Variables",
+    ylab = "Cp", type = "l")
+plot(summary(mod.allsubset)$bic, xlab = "Number of Variables",
+    ylab = "BIC", type = "l")
+# Tip: type = "l" connects lines between the plotted 6 points.
+```
+
+
+```{r}
+r_max = which.max(summary(mod.allsubset)$adjr2)
+plot(summary(mod.allsubset)$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted RSq", type = "l")
+points(r_max, summary(mod.allsubset)$adjr2[r_max], col = "red", cex = 2, 
+    pch = 20)
+```
+
+
+
+```{r}
+bic_min = which.min(summary(mod.allsubset)$bic)
+plot(summary(mod.allsubset)$bic, xlab = "Number of Variables",
+    ylab = "BIC", type = "l")
+points(bic_min, summary(mod.allsubset)$bic[bic_min], col = "red", cex = 2, 
+    pch = 20)
+```
+
+
+
+
+```{r}
+fit1 = lm(log(High)~Adj.Close+Open+Volume+Low, data=Tesla)
+fit2 = lm(log(High)~Adj.Close+Volume+Low, data=Tesla)
+par(mfrow = c(1, 2))
+png(file="./Teslafit1.png");plot(fit1$res~fit1$fitted)
+abline(0,0,col = "red");dev.off()
+plot(fit2$res~fit2$fitted)
+abline(0,0,col = "red")
+```
+
+
+
+```{r}
+eval_mat = matrix(0, nrow=3, ncol=4) # initiate a 3 by 3 matrix.
+colnames(eval_mat) = c("R-sq","adj R-sq", "AIC", "BIC")
+eval_mat[1,] = c( summary(fit)$r.squared, summary(fit)$adj.r.squared,AIC(fit),BIC(fit) )
+eval_mat[2,] = c( summary(fit1)$r.squared, summary(fit1)$adj.r.squared,AIC(fit1),BIC(fit1) )
+eval_mat[3,] = c( summary(fit2)$r.squared, summary(fit2)$adj.r.squared,AIC(fit2),BIC(fit2) )
+print(eval_mat)
+```
+# Conclusion
+#### fit is the best model based on 𝑅^2 , adjusted 𝑅^2.
+#### fit1 is the best model based on AIC and BIC.
+
+
+
+```{r}
+ms.vec = NULL 
+# initate a vector to record overall Mean Square Error (MSE) of each model
+```
+
+```{r}
+cv.fit = CVlm(Tesla,fit, m=3)
+```
+```{r}
+# Obtain the overall MSE value and record it
+attr(cv.fit,"ms")
+ms.vec = c(ms.vec, attr(cv.fit,"ms"))
+```
+
+```{r}
+cv.fit1 = CVlm(Tesla,fit1, m=3)
+attr(cv.fit1,"ms")
+ms.vec= c(ms.vec, attr(cv.fit1,"ms"))
+```
+
+
+```{r}
+cv.fit2 = CVlm(Tesla,fit2, m=3)
+```
+
+```{r}
+attr(cv.fit2,"ms")
+ms.vec= c(ms.vec, attr(cv.fit2,"ms"))
+```
+
+```{r}
+ms.vec
+```
+# Conslusion
+#### Based on parsimony or KISS rule, I personally would recommend fit1 which is the best model selected by the AIC, BIC and now the lowest MSE of 0.5378050 based on 3-fold CV.
+
+
+```{r}
+summary(fit1)
+```
+# TREE METHOD
+
+```{r}
+##Removing the date column from the dataset
+Tesla_p <- Tesla[c(2:7)]
+Tesla_p
+```
+
+
+```{r}
+# 1 Data Partition and RMSE function
+set.seed(310)
+index = sample(1:nrow(Tesla_p), nrow(Tesla_p)*0.8, replace=F)
+train_t = Tesla_p[index,]
+test_t = Tesla_p[-index,]
+dim(train_t)
+dim(test_t)
+```
+
+```{r}
+myRMSE = function(actual, predicts){
+mse = mean( (actual-predicts)^2)
+return( sqrt(mse) )
+}
+```
+
+```{r warning=FALSE}
+#1.2 Linear regression
+mod.lin = lm(High~.,data=Tesla_p)
+pred.train=predict(mod.lin, newdata=train_t)
+pred.test = predict(mod.lin, newdata=test_t)
+#find MSE on training and testing
+lin.rmse.trt = myRMSE(train_t$High, pred.train)
+lin.rmse.tst = myRMSE(test_t$High, pred.test)
+cat("training RMSE:", lin.rmse.trt)
+cat("\ntesting RMSE:", lin.rmse.tst)
+
+```
+
+```{r}
+library(tree)
+```
+
+```{r}
+atree = tree(High~., data = train_t)
+summary(atree)
+```
+
+```{r}
+plot(atree)
+text(atree, pretty = 0)
+title(main = "Unpruned Regression Tree")
+```
+# Coclusion
+#### Variable Close is the closing price of the stock of that day while the variable open is opening price of the stock.
+#### tree indicates larger value of closing or lower values of opening price, corresponds to a higher range of High Stock Price of that day. 
+
+
+```{r}
+# Do cross-validation to select a good pruning of the tree
+set.seed(310)
+tree_cv = cv.tree(atree, K=10)
+plot(tree_cv$size, sqrt(tree_cv$dev/nrow(train_t)),
+type="b",
+xlab= "Tree Size",
+ylab = "CV-RMSE")
+```
+
+
+
+```{r}
+tree_prune = prune.tree(atree , best = 5)
+summary(tree_prune)
+#plot tree
+plot(tree_prune)
+text(tree_prune, pretty = 0)
+title(main = "Pruned Regression Tree")
+```
+
+```{r}
+tree.pred.train = predict(tree_prune, newdata = train_t)
+tree.pred.test = predict(tree_prune, newdata = test_t)
+# find MSE on training and testing
+tree.rmse.trt = myRMSE(train_t$High,tree.pred.train)
+tree.rmse.tst = myRMSE(test_t$High, tree.pred.test)
+cat("training RMSE:", tree.rmse.trt)
+cat("\ntesting RMSE:", tree.rmse.tst)
+```
+
+```{r}
+plot(tree.pred.test, test_t$High,
+xlab = "Predicted",
+ylab = "Actual",
+main = "Predicted vs Actual: Single Tree, Test Data",
+col = "Blue", pch = 20)
+grid()
+abline(0,1, col="red", lty = 2, lwd = 2)
+```
+# Ensemble Tree Methodss
+
+
+
+```{r}
+# Bagging
+mod.bag = randomForest(High ~ .,
+                      data = train_t,
+                      mtry = 5,
+                      type= "regression",
+                      importance = TRUE,
+                      ntrees = 500)
+mod.bag
+```
+
+
+```{r}
+bag.pred.train = predict(mod.bag, newdata=train_t)
+bag.pred.test = predict(mod.bag, newdata=test_t)
+bag.rmse.trt = myRMSE(train_t$High, bag.pred.train)
+bag.rmse.tst = myRMSE(test_t$High, bag.pred.test)
+cat("training RMSE:", bag.rmse.trt)
+cat("\ntesting RMSE:", bag.rmse.tst)
+```
+
+```{r}
+plot(bag.pred.test,test_t$High,
+xlab = "Predicted", ylab = "Actual",
+main = "Predicted vs Actual: Bagged Model, Test Data",
+col = "dodgerblue", pch = 20)
+grid()
+abline(0,1, col ="red", lty = 2, lwd = 2)
+```
+
+```{r}
+forest = randomForest(High~.,
+                      data = train_t,
+                      mtry = 2,
+                      type="regression",
+                      importance = TRUE,
+                      ntrees = 500)
+forest
+```
+
+```{r}
+forest.pred.train = predict(forest,newdata=train_t)
+forest.pred.test = predict(forest,newdata=test_t)
+forest.rmse.trt = myRMSE(train_t$High,forest.pred.train)
+forest.rmse.tst = myRMSE(test_t$High, forest.pred.test)
+cat("training RMSE:", forest.rmse.trt)
+cat("\ntesting RMSE:", forest.rmse.tst)
+```
+
+```{r}
+#OOB rate
+myRMSE(forest$predicted,train_t$High)
+```
+
+```{r}
+png(file="./TeslaForest.png");plot(forest.pred.test, test_t$High,
+xlab= "Predicted",
+ylab = "Actual",
+main = "Predicted vs Actual: Random Forest, Test Data",
+col = "dodgerblue",pch=20)
+grid()
+abline(0,1,col="red", lty = 2, lwd = 2); dev.off()
+```
+
+```{r}
+#type: 1 = mean decrease in accuracy
+# 2 = mean decrease in node impurity
+importance(forest, type = 1)
+```
+
+```{r}
+varImpPlot(forest, type = 1)
+```
+
+```{r}
+boost = gbm(High~.,
+            data = train_t,
+            distribution = "gaussian",
+            n.trees = 5000,
+            interaction.depth = 4,
+            shrinkage= 0.1)
+boost
+```
+
+```{r}
+boost.pred.train = predict(boost,newdata=train_t,n.trees = 5000)
+boost.pred.test = predict(boost,newdata=test_t,n.trees = 5000)
+boost.rmse.trt = myRMSE(train_t$High,boost.pred.train)
+boost.rmse.tst = myRMSE(test_t$High, boost.pred.test)
+cat("training RMSE:", boost.rmse.trt)
+cat("\ntesting RMSE:", boost.rmse.tst)
+```
+
+
+```{r}
+png(file="./Teslasummary.png");summary(boost);dev.off()
+```
+
+```{r}
+plot(boost, i = "Open", col = "dodgerblue", lwd = 2)
+plot(boost, i = "Low", col = "dodgerblue", lwd = 2)
+png(file="./TeslaClose.png");plot(boost, i = "Close", col = "dodgerblue", lwd = 2);dev.off()
+```
+
+```{r}
+as_tibble(cbind( method=c("Lin Regression","Pruned Tree","Bagging","Forest","Boosting"),
+  rmses = c(lin.rmse.tst,tree.rmse.tst,bag.rmse.tst,
+              forest.rmse.tst,boost.rmse.tst)))
+```
+
+# Conclusion
+#### Linear Regression has the lowest RMSE, it performs best out of all. 
